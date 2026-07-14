@@ -34,9 +34,7 @@ import (
 
 func main() {
 	// ── Global flags ──────────────────────────────────────────────────────
-	difficulty := flag.Int("difficulty", 3, "Proof-of-work difficulty (number of leading hex zeros)")
 	dataFile := flag.String("data", "chain.json", "Path to the chain data file")
-	maxTx := flag.Int("maxtx", 0, "Maximum transactions per block (0 = unlimited)")
 
 	// We need to parse global flags before extracting the sub-command.
 	flag.Parse()
@@ -50,8 +48,7 @@ func main() {
 	command := args[0]
 
 	// ── Load or initialise chain ──────────────────────────────────────────
-	bc := chain.NewChain(*difficulty)
-	bc.MaxTxPerBlock = *maxTx
+	bc := chain.NewChain()
 
 	savedBlocks, savedPending, err := persist.Load(*dataFile)
 	if err != nil {
@@ -85,6 +82,8 @@ func main() {
 		cmdMine(bc, l, *dataFile)
 	case "print":
 		cmdPrint(bc)
+	case "resolve-fork":
+		cmdResolveFork(args[1:], bc, l, *dataFile)
 	case "validate":
 		cmdValidate(bc)
 	case "balances":
@@ -160,7 +159,7 @@ func cmdMine(bc *chain.Chain, l *ledger.Ledger, dataFile string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Mining block %d (difficulty %d)...\n", len(bc.Blocks), bc.Difficulty)
+	fmt.Printf("Mining block %d (difficulty %d)...\n", len(bc.Blocks), bc.GetDifficulty(len(bc.Blocks)))
 
 	minedBlock, attempts, elapsed, err := bc.MineNextBlock(l)
 	if err != nil {
@@ -185,6 +184,33 @@ func cmdMine(bc *chain.Chain, l *ledger.Ledger, dataFile string) {
 
 func cmdPrint(bc *chain.Chain) {
 	fmt.Print(bc.PrintChain())
+}
+
+func cmdResolveFork(args []string, bc *chain.Chain, l *ledger.Ledger, dataFile string) {
+	fs := flag.NewFlagSet("resolve-fork", flag.ExitOnError)
+	competingFile := fs.String("competing", "", "Path to the competing chain data file")
+	fs.Parse(args)
+
+	if *competingFile == "" {
+		fmt.Fprintln(os.Stderr, "Usage: blockchain resolve-fork -competing <path_to_chain.json>")
+		os.Exit(1)
+	}
+
+	competingBlocks, _, err := persist.Load(*competingFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load competing chain: %v\n", err)
+		os.Exit(1)
+	}
+
+	success := bc.ResolveFork(competingBlocks, l)
+	if success {
+		fmt.Println("✓ Competing chain adopted (it was valid and longer)!")
+		if err := persist.Save(bc.Blocks, bc.Pending, dataFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save state: %v\n", err)
+		}
+	} else {
+		fmt.Println("✗ Competing chain rejected (shorter or invalid).")
+	}
 }
 
 func cmdValidate(bc *chain.Chain) {
@@ -222,17 +248,16 @@ func printUsage() {
 	fmt.Println("Usage: blockchain [flags] <command> [command-flags]")
 	fmt.Println()
 	fmt.Println("Commands:")
-	fmt.Println("  gen-key    Generate a new wallet key pair")
-	fmt.Println("  add-tx     Add a transaction to the pending pool")
-	fmt.Println("  mine       Mine a new block from pending transactions")
-	fmt.Println("  print      Print the full chain")
-	fmt.Println("  validate   Validate chain integrity")
-	fmt.Println("  balances   Show all account balances")
+	fmt.Println("  gen-key      Generate a new wallet key pair")
+	fmt.Println("  add-tx       Add a transaction to the pending pool")
+	fmt.Println("  mine         Mine a new block from pending transactions")
+	fmt.Println("  print        Print the full chain")
+	fmt.Println("  resolve-fork Resolve a fork using a competing chain file")
+	fmt.Println("  balances     Print the balances of all known accounts")
+	fmt.Println("  validate     Run a full integrity check on the loaded chain")
 	fmt.Println()
 	fmt.Println("Global flags:")
-	fmt.Println("  -difficulty N   PoW difficulty (default 3)")
 	fmt.Println("  -data PATH     Data file path (default chain.json)")
-	fmt.Println("  -maxtx N       Max txns per block (default 0 = unlimited)")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  blockchain add-tx -from coinbase -to Alice -amount 100")

@@ -12,23 +12,58 @@ import (
 	"blockchain/ledger"
 )
 
+const (
+	BaseDifficulty               = 2 // Base difficulty
+	TargetBlockTime              = 2 // Target block time in seconds
+	DifficultyAdjustmentInterval = 5 // Adjust difficulty every 5 blocks
+)
+
 // Chain holds the full sequence of mined blocks and a pool of pending
 // transactions that have not yet been included in a block.
 type Chain struct {
 	Blocks        []block.Block       `json:"blocks"`
 	Pending       []block.Transaction `json:"-"` // not persisted; drained on mine
-	Difficulty    int                 `json:"-"` // configurable PoW difficulty
 	MaxTxPerBlock int                 `json:"-"` // max transactions per block (0 = unlimited)
 }
 
 // NewChain creates a fresh blockchain initialised with the deterministic
 // genesis block (FR-2). All other blocks descend from it.
-func NewChain(difficulty int) *Chain {
+func NewChain() *Chain {
 	return &Chain{
-		Blocks:     []block.Block{block.GenesisBlock()},
-		Pending:    []block.Transaction{},
-		Difficulty: difficulty,
+		Blocks:  []block.Block{block.GenesisBlock()},
+		Pending: []block.Transaction{},
 	}
+}
+
+// GetDifficulty calculates the required difficulty for a given height,
+// adjusting based on the time taken to mine the previous blocks.
+func (c *Chain) GetDifficulty(height int) int {
+	if height < DifficultyAdjustmentInterval {
+		return BaseDifficulty
+	}
+
+	diff := BaseDifficulty
+	boundary := (height / DifficultyAdjustmentInterval) * DifficultyAdjustmentInterval
+
+	for h := DifficultyAdjustmentInterval; h <= boundary; h += DifficultyAdjustmentInterval {
+		if h-1 >= len(c.Blocks) || h-DifficultyAdjustmentInterval >= len(c.Blocks) {
+			break
+		}
+		lastBlock := c.Blocks[h-1]
+		firstBlock := c.Blocks[h-DifficultyAdjustmentInterval]
+
+		timeExpected := int64(DifficultyAdjustmentInterval * TargetBlockTime)
+		timeTaken := lastBlock.Timestamp - firstBlock.Timestamp
+
+		if timeTaken < timeExpected/2 {
+			diff++
+		} else if timeTaken > timeExpected*2 {
+			if diff > 1 {
+				diff--
+			}
+		}
+	}
+	return diff
 }
 
 // AddTransaction validates a transaction against the current ledger state
@@ -61,8 +96,9 @@ func (c *Chain) MineNextBlock(l *ledger.Ledger) (block.Block, int, time.Duration
 
 	lastBlock := c.Blocks[len(c.Blocks)-1]
 	newHeight := lastBlock.Height + 1
+	difficulty := c.GetDifficulty(newHeight)
 
-	minedBlock, attempts, elapsed := block.MineBlock(newHeight, lastBlock.Hash, txns, c.Difficulty)
+	minedBlock, attempts, elapsed := block.MineBlock(newHeight, lastBlock.Hash, txns, difficulty)
 
 	// Apply transactions to the ledger.
 	for _, tx := range txns {
@@ -98,7 +134,6 @@ func (c *Chain) Validate() ValidationResult {
 		return ValidationResult{Valid: false, ErrorBlock: -1, ErrorMessage: "chain is empty"}
 	}
 
-	prefix := strings.Repeat("0", c.Difficulty)
 	testLedger := ledger.NewLedger()
 
 	for i, b := range c.Blocks {
@@ -150,11 +185,15 @@ func (c *Chain) Validate() ValidationResult {
 		}
 
 		// Check proof-of-work target (skip genesis which may not need mining).
-		if i > 0 && !strings.HasPrefix(b.Hash, prefix) {
-			return ValidationResult{
-				Valid:        false,
-				ErrorBlock:   i,
-				ErrorMessage: fmt.Sprintf("block %d hash does not meet difficulty target (need prefix %q)", i, prefix),
+		if i > 0 {
+			diff := c.GetDifficulty(i)
+			prefix := strings.Repeat("0", diff)
+			if !strings.HasPrefix(b.Hash, prefix) {
+				return ValidationResult{
+					Valid:        false,
+					ErrorBlock:   i,
+					ErrorMessage: fmt.Sprintf("block %d hash does not meet difficulty target (need prefix %q)", i, prefix),
+				}
 			}
 		}
 
@@ -187,7 +226,7 @@ func (c *Chain) Validate() ValidationResult {
 // PrintChain returns a human-readable representation of the entire chain.
 func (c *Chain) PrintChain() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Blockchain (%d blocks, difficulty %d)\n", len(c.Blocks), c.Difficulty))
+	sb.WriteString(fmt.Sprintf("Blockchain (%d blocks)\n", len(c.Blocks)))
 	sb.WriteString(strings.Repeat("=", 70) + "\n")
 
 	for _, b := range c.Blocks {
@@ -203,4 +242,35 @@ func (c *Chain) PrintChain() string {
 	}
 
 	return sb.String()
+}
+
+// ResolveFork implements the longest-valid-chain rule.
+// If the competingBlocks represent a valid chain that is longer than the current chain,
+// this node adopts the competing chain and rebuilds its ledger.
+func (c *Chain) ResolveFork(competingBlocks []block.Block, l *ledger.Ledger) bool {
+	if len(competingBlocks) <= len(c.Blocks) {
+		return false // must be strictly longer
+	}
+
+	// Create a temporary chain to validate the competing blocks.
+	tempChain := &Chain{
+		Blocks:  competingBlocks,
+		Pending: nil,
+	}
+
+	res := tempChain.Validate()
+	if !res.Valid {
+		return false // reject invalid competing chain
+	}
+
+	// It's valid and longer! Adopt it.
+	c.Blocks = competingBlocks
+
+	// Rebuild the ledger.
+	l.RebuildFromBlocks(c.Blocks)
+
+	// Clean up pending transactions
+	c.Pending = []block.Transaction{}
+
+	return true
 }

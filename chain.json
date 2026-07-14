@@ -4,28 +4,26 @@
       "height": 0,
       "timestamp": 0,
       "transactions": [],
+      "merkle_root": "0000000000000000000000000000000000000000000000000000000000000000",
       "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "nonce": 0,
-      "hash": "258a64c0592be20a75180fa460ba4b9fef9cf731ef0cb860cb9a1423f5b674c7"
+      "hash": "e9d5d522efd2c30e05a5c3943a9bdfb30272fcbfd60bdf21c4f2a680c9e9839c"
     },
     {
       "height": 1,
-      "timestamp": 1784023267,
+      "timestamp": 1784028680,
       "transactions": [
         {
           "from": "coinbase",
-          "to": "Alice",
-          "amount": 500
-        },
-        {
-          "from": "Alice",
-          "to": "Bob",
-          "amount": 200
+          "to": "6e6ee3391ce2bbef787ed25232380cd96e633cac2a1310df82a92ac3b7a3e818",
+          "amount": 10,
+          "pub_key": "coinbase"
         }
       ],
-      "prev_hash": "258a64c0592be20a75180fa460ba4b9fef9cf731ef0cb860cb9a1423f5b674c7",
-      "nonce": 6357,
-      "hash": "000ab73852055edc069785872dd36b9e25e2bedb45cef8e77c0cb7ee83e2e678"
+      "merkle_root": "257b24cffc3863020d83e32484d0f531f4a77ad1844c3326a818da5b1a52fd85",
+      "prev_hash": "e9d5d522efd2c30e05a5c3943a9bdfb30272fcbfd60bdf21c4f2a680c9e9839c",
+      "nonce": 2068,
+      "hash": "00021f74afd1d67611ccf5e955c86b9adf68178cf06c176dc0ab8a4dafd74058"
     }
   ]
 }

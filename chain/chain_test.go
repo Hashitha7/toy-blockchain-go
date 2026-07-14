@@ -23,7 +23,7 @@ func makeSignedTx(t *testing.T, pubKey, privKey, to string, amount int64) block.
 // TestValidChainPasses builds a small honest chain and confirms that
 // validation reports it as valid (FR-6 — honest chain scenario).
 func TestValidChainPasses(t *testing.T) {
-	bc := chain.NewChain(1) // low difficulty for fast tests
+	bc := chain.NewChain() // dynamic difficulty now
 	l := ledger.NewLedger()
 
 	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
@@ -53,7 +53,7 @@ func TestValidChainPasses(t *testing.T) {
 // TestTamperDetection modifies a transaction inside an early block and
 // verifies that validation catches the tampering (FR-6 — tamper scenario).
 func TestTamperDetection(t *testing.T) {
-	bc := chain.NewChain(1)
+	bc := chain.NewChain()
 	l := ledger.NewLedger()
 
 	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
@@ -90,7 +90,7 @@ func TestTamperDetection(t *testing.T) {
 // TestGenesisOnlyChain verifies that a freshly created chain with only the
 // genesis block is valid (FR-2).
 func TestGenesisOnlyChain(t *testing.T) {
-	bc := chain.NewChain(1)
+	bc := chain.NewChain()
 	result := bc.Validate()
 	if !result.Valid {
 		t.Errorf("genesis-only chain should be valid: %s", result.ErrorMessage)
@@ -107,7 +107,7 @@ func TestGenesisOnlyChain(t *testing.T) {
 // (e.g. an overspend) somehow makes it into a block on disk, the Validate()
 // function catches it during ledger replay.
 func TestMinedOverspendValidationFailed(t *testing.T) {
-	bc := chain.NewChain(1)
+	bc := chain.NewChain()
 	l := ledger.NewLedger()
 
 	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
@@ -122,7 +122,7 @@ func TestMinedOverspendValidationFailed(t *testing.T) {
 	lastBlock := bc.Blocks[len(bc.Blocks)-1]
 
 	// Create and mine the invalid block
-	invalidBlock, _, _ := block.MineBlock(lastBlock.Height+1, lastBlock.Hash, []block.Transaction{overspendTx}, bc.Difficulty)
+	invalidBlock, _, _ := block.MineBlock(lastBlock.Height+1, lastBlock.Hash, []block.Transaction{overspendTx}, bc.GetDifficulty(lastBlock.Height+1))
 	bc.Blocks = append(bc.Blocks, invalidBlock)
 
 	result := bc.Validate()
@@ -139,7 +139,7 @@ func TestMinedOverspendValidationFailed(t *testing.T) {
 // AND re-mines it so its hash and PoW are valid, the chain still fails validation
 // because the next block's prev_hash link is broken.
 func TestTamperedAndReminedBlockDetected(t *testing.T) {
-	bc := chain.NewChain(1)
+	bc := chain.NewChain()
 	l := ledger.NewLedger()
 
 	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
@@ -159,7 +159,7 @@ func TestTamperedAndReminedBlockDetected(t *testing.T) {
 	bc.Blocks[1].Transactions[0].Amount = 999999
 
 	// Re-mine Block 1 to fix its own hash and PoW
-	remined, _, _ := block.MineBlock(1, bc.Blocks[0].Hash, bc.Blocks[1].Transactions, bc.Difficulty)
+	remined, _, _ := block.MineBlock(1, bc.Blocks[0].Hash, bc.Blocks[1].Transactions, bc.GetDifficulty(1))
 	bc.Blocks[1] = remined
 
 	// Validate the chain - should fail at Block 2 because its prev_hash points to the old Block 1
@@ -171,4 +171,43 @@ func TestTamperedAndReminedBlockDetected(t *testing.T) {
 		t.Errorf("expected error at block 2, got %d", result.ErrorBlock)
 	}
 	t.Logf("correctly caught re-mined tamper via prev-hash link: %s", result.ErrorMessage)
+}
+
+// TestDifficultyRetargeting validates that the difficulty adjusts properly
+func TestDifficultyRetargeting(t *testing.T) {
+	bc := chain.NewChain()
+
+	// initial difficulty should be base
+	if bc.GetDifficulty(1) != chain.BaseDifficulty {
+		t.Errorf("expected base difficulty %d, got %d", chain.BaseDifficulty, bc.GetDifficulty(1))
+	}
+}
+
+// TestResolveFork validates longest-valid-chain rule
+func TestResolveFork(t *testing.T) {
+	bc1 := chain.NewChain()
+	bc2 := chain.NewChain()
+	l := ledger.NewLedger()
+
+	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
+	bobPub, _, _ := wallet.GenerateKeyPair()
+
+	// bc1 mines 1 block
+	bc1.AddTransaction(block.Transaction{From: "coinbase", To: alicePub, Amount: 100}, l)
+	bc1.MineNextBlock(l)
+
+	// bc2 mines 2 blocks
+	bc2.AddTransaction(block.Transaction{From: "coinbase", To: alicePub, Amount: 100}, l)
+	bc2.MineNextBlock(l)
+	bc2.AddTransaction(makeSignedTx(t, alicePub, alicePriv, bobPub, 50), l)
+	bc2.MineNextBlock(l)
+
+	// bc1 tries to resolve fork with bc2's blocks. It should succeed because bc2 is longer.
+	success := bc1.ResolveFork(bc2.Blocks, l)
+	if !success {
+		t.Fatal("expected to adopt longer valid chain")
+	}
+	if len(bc1.Blocks) != 3 {
+		t.Errorf("expected chain length 3, got %d", len(bc1.Blocks))
+	}
 }
