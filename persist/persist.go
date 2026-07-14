@@ -27,8 +27,12 @@ func Save(blocks []block.Block, pending []block.Transaction, filePath string) er
 		return fmt.Errorf("persist: marshal error: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, jsonBytes, 0644); err != nil {
+	tmpPath := filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonBytes, 0644); err != nil {
 		return fmt.Errorf("persist: write error: %w", err)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		return fmt.Errorf("persist: rename error: %w", err)
 	}
 
 	return nil

@@ -59,6 +59,12 @@ func main() {
 	}
 	if savedBlocks != nil {
 		bc.Blocks = savedBlocks
+		// Validate the loaded chain to prevent silent acceptance of corrupted data
+		res := bc.Validate()
+		if !res.Valid {
+			fmt.Fprintf(os.Stderr, "Corrupted chain file: %s (Block %d)\n", res.ErrorMessage, res.ErrorBlock)
+			os.Exit(1)
+		}
 	}
 	if savedPending != nil {
 		bc.Pending = savedPending
@@ -67,15 +73,6 @@ func main() {
 	// Rebuild ledger from persisted blocks.
 	l := ledger.NewLedger()
 	l.RebuildFromBlocks(bc.Blocks)
-
-	// Pre-apply coinbase transactions from the pending pool so that
-	// funds minted in a previous add-tx invocation are available for
-	// spending before mining.
-	for _, tx := range bc.Pending {
-		if tx.From == "coinbase" {
-			l.ApplyTransaction(tx)
-		}
-	}
 
 	// ── Dispatch command ──────────────────────────────────────────────────
 	switch command {
@@ -102,7 +99,7 @@ func cmdAddTx(args []string, bc *chain.Chain, l *ledger.Ledger, dataFile string)
 	fs := flag.NewFlagSet("add-tx", flag.ExitOnError)
 	from := fs.String("from", "", "Sender address (use 'coinbase' to mint)")
 	to := fs.String("to", "", "Recipient address")
-	amount := fs.Float64("amount", 0, "Amount to transfer")
+	amount := fs.Int64("amount", 0, "Amount to transfer")
 	fs.Parse(args)
 
 	if *from == "" || *to == "" || *amount == 0 {
@@ -117,13 +114,7 @@ func cmdAddTx(args []string, bc *chain.Chain, l *ledger.Ledger, dataFile string)
 		os.Exit(1)
 	}
 
-	// For coinbase, apply immediately so subsequent add-tx in the same
-	// session can spend the minted funds before mining.
-	if tx.From == "coinbase" {
-		l.ApplyTransaction(tx)
-	}
-
-	fmt.Printf("✓ Transaction added to pending pool: %s → %s : %.2f\n", tx.From, tx.To, tx.Amount)
+	fmt.Printf("✓ Transaction added to pending pool: %s → %s : %d\n", tx.From, tx.To, tx.Amount)
 	fmt.Printf("  Pending transactions: %d\n", len(bc.Pending))
 
 	// Persist pending transactions so they survive between invocations.
@@ -190,7 +181,7 @@ func cmdBalances(l *ledger.Ledger) {
 		if account == "coinbase" {
 			continue // don't show the coinbase pseudo-account
 		}
-		fmt.Printf("  %-20s : %.2f\n", account, balance)
+		fmt.Printf("  %-20s : %d\n", account, balance)
 	}
 }
 

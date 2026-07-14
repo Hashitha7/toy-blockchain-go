@@ -10,7 +10,7 @@
     },
     {
       "height": 1,
-      "timestamp": 1784017896,
+      "timestamp": 1784023267,
       "transactions": [
         {
           "from": "coinbase",
@@ -21,35 +21,11 @@
           "from": "Alice",
           "to": "Bob",
           "amount": 200
-        },
-        {
-          "from": "Alice",
-          "to": "Charlie",
-          "amount": 100
         }
       ],
       "prev_hash": "258a64c0592be20a75180fa460ba4b9fef9cf731ef0cb860cb9a1423f5b674c7",
-      "nonce": 7423,
-      "hash": "000af9011605b704595925e5cc4d3fff46ef217a82ce90052bba7b3f29a1974a"
-    },
-    {
-      "height": 2,
-      "timestamp": 1784022101,
-      "transactions": [
-        {
-          "from": "coinbase",
-          "to": "Alice",
-          "amount": 100
-        },
-        {
-          "from": "Alice",
-          "to": "Bob",
-          "amount": 25
-        }
-      ],
-      "prev_hash": "000af9011605b704595925e5cc4d3fff46ef217a82ce90052bba7b3f29a1974a",
-      "nonce": 20160,
-      "hash": "000e1469f1a40bcd14fabf3f8777f3748a4a354ddeea7b54364c6f91578d2ea1"
+      "nonce": 6357,
+      "hash": "000ab73852055edc069785872dd36b9e25e2bedb45cef8e77c0cb7ee83e2e678"
     }
   ]
 }

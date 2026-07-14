@@ -11,13 +11,13 @@ import (
 // Ledger maintains the balance of every account that has ever sent or
 // received funds. It is rebuilt by replaying all transactions in the chain.
 type Ledger struct {
-	Balances map[string]float64
+	Balances map[string]int64
 }
 
 // NewLedger creates a new, empty ledger.
 func NewLedger() *Ledger {
 	return &Ledger{
-		Balances: make(map[string]float64),
+		Balances: make(map[string]int64),
 	}
 }
 
@@ -29,13 +29,17 @@ func NewLedger() *Ledger {
 //   - Amount must be positive (> 0).
 //   - The special sender "coinbase" can mint unlimited funds (faucet).
 //   - Any other sender must have a balance >= Amount.
-func (l *Ledger) ValidateTransaction(tx block.Transaction) error {
+func (l *Ledger) ValidateTransaction(tx block.Transaction, pending []block.Transaction) error {
 	if tx.Amount <= 0 {
-		return fmt.Errorf("invalid amount: %.2f (must be positive)", tx.Amount)
+		return fmt.Errorf("invalid amount: %d (must be positive)", tx.Amount)
 	}
 
 	if tx.From == "" || tx.To == "" {
 		return fmt.Errorf("sender and recipient must not be empty")
+	}
+
+	if tx.To == "coinbase" {
+		return fmt.Errorf("coinbase is a reserved sender, cannot be used as a recipient")
 	}
 
 	// Coinbase transactions can create money out of thin air.
@@ -43,9 +47,16 @@ func (l *Ledger) ValidateTransaction(tx block.Transaction) error {
 		return nil
 	}
 
-	balance := l.Balances[tx.From]
-	if balance < tx.Amount {
-		return fmt.Errorf("insufficient balance: %s has %.2f, tried to send %.2f", tx.From, balance, tx.Amount)
+	// Calculate available balance: on-chain balance minus already pending spends.
+	available := l.Balances[tx.From]
+	for _, ptx := range pending {
+		if ptx.From == tx.From {
+			available -= ptx.Amount
+		}
+	}
+
+	if available < tx.Amount {
+		return fmt.Errorf("insufficient balance: %s has %d available (on-chain minus pending), tried to send %d", tx.From, available, tx.Amount)
 	}
 
 	return nil
@@ -65,7 +76,7 @@ func (l *Ledger) ApplyTransaction(tx block.Transaction) {
 // (in order) to reconstruct the full ledger state. This is called at startup
 // when loading a persisted chain.
 func (l *Ledger) RebuildFromBlocks(blocks []block.Block) {
-	l.Balances = make(map[string]float64)
+	l.Balances = make(map[string]int64)
 	for _, b := range blocks {
 		for _, tx := range b.Transactions {
 			l.ApplyTransaction(tx)

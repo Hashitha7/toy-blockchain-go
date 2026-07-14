@@ -35,7 +35,7 @@ func NewChain(difficulty int) *Chain {
 // and, if accepted, adds it to the pending pool. Returns an error if the
 // transaction is rejected.
 func (c *Chain) AddTransaction(tx block.Transaction, l *ledger.Ledger) error {
-	if err := l.ValidateTransaction(tx); err != nil {
+	if err := l.ValidateTransaction(tx, c.Pending); err != nil {
 		return err
 	}
 	c.Pending = append(c.Pending, tx)
@@ -99,6 +99,7 @@ func (c *Chain) Validate() ValidationResult {
 	}
 
 	prefix := strings.Repeat("0", c.Difficulty)
+	testLedger := ledger.NewLedger()
 
 	for i, b := range c.Blocks {
 		// Check height is sequential.
@@ -156,6 +157,19 @@ func (c *Chain) Validate() ValidationResult {
 				ErrorMessage: fmt.Sprintf("block %d timestamp (%d) is before block %d timestamp (%d)", i, b.Timestamp, i-1, c.Blocks[i-1].Timestamp),
 			}
 		}
+
+		// Replay transactions to check ledger validity (no overspends, no negative amounts)
+		for _, tx := range b.Transactions {
+			// Pass nil for pending since we are replaying confirmed blocks
+			if err := testLedger.ValidateTransaction(tx, nil); err != nil {
+				return ValidationResult{
+					Valid:        false,
+					ErrorBlock:   i,
+					ErrorMessage: fmt.Sprintf("invalid transaction: %v", err),
+				}
+			}
+			testLedger.ApplyTransaction(tx)
+		}
 	}
 
 	return ValidationResult{Valid: true, ErrorBlock: -1}
@@ -175,7 +189,7 @@ func (c *Chain) PrintChain() string {
 		sb.WriteString(fmt.Sprintf("  Nonce     : %d\n", b.Nonce))
 		sb.WriteString(fmt.Sprintf("  Txns      : %d\n", len(b.Transactions)))
 		for j, tx := range b.Transactions {
-			sb.WriteString(fmt.Sprintf("    [%d] %s -> %s : %.2f\n", j, tx.From, tx.To, tx.Amount))
+			sb.WriteString(fmt.Sprintf("    [%d] %s -> %s : %d\n", j, tx.From, tx.To, tx.Amount))
 		}
 	}
 

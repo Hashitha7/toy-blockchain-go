@@ -14,9 +14,9 @@ import (
 // From is the sender, To is the recipient, and Amount is the value transferred.
 // A special sender value "coinbase" is used to mint new funds into the system.
 type Transaction struct {
-	From   string  `json:"from"`
-	To     string  `json:"to"`
-	Amount float64 `json:"amount"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Amount int64  `json:"amount"`
 }
 
 // Block represents a single block in the blockchain.
