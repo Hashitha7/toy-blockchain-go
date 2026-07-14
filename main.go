@@ -29,6 +29,7 @@ import (
 	"blockchain/chain"
 	"blockchain/ledger"
 	"blockchain/persist"
+	"blockchain/wallet"
 )
 
 func main() {
@@ -78,6 +79,8 @@ func main() {
 	switch command {
 	case "add-tx":
 		cmdAddTx(args[1:], bc, l, *dataFile)
+	case "gen-key":
+		cmdGenKey()
 	case "mine":
 		cmdMine(bc, l, *dataFile)
 	case "print":
@@ -100,14 +103,28 @@ func cmdAddTx(args []string, bc *chain.Chain, l *ledger.Ledger, dataFile string)
 	from := fs.String("from", "", "Sender address (use 'coinbase' to mint)")
 	to := fs.String("to", "", "Recipient address")
 	amount := fs.Int64("amount", 0, "Amount to transfer")
+	privKey := fs.String("priv", "", "Private key to sign the transaction (required unless coinbase)")
 	fs.Parse(args)
 
 	if *from == "" || *to == "" || *amount == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: blockchain add-tx -from SENDER -to RECIPIENT -amount VALUE")
+		fmt.Fprintln(os.Stderr, "Usage: blockchain add-tx -from SENDER -to RECIPIENT -amount VALUE [-priv PRIVATE_KEY]")
 		os.Exit(1)
 	}
 
-	tx := block.Transaction{From: *from, To: *to, Amount: *amount}
+	tx := block.Transaction{From: *from, To: *to, Amount: *amount, PubKey: *from}
+
+	if *from != "coinbase" {
+		if *privKey == "" {
+			fmt.Fprintln(os.Stderr, "Error: -priv is required for non-coinbase transactions")
+			os.Exit(1)
+		}
+		sig, err := wallet.Sign(*privKey, tx.SignableData())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error signing transaction: %v\n", err)
+			os.Exit(1)
+		}
+		tx.Signature = sig
+	}
 
 	if err := bc.AddTransaction(tx, l); err != nil {
 		fmt.Fprintf(os.Stderr, "Transaction rejected: %v\n", err)
@@ -121,6 +138,20 @@ func cmdAddTx(args []string, bc *chain.Chain, l *ledger.Ledger, dataFile string)
 	if err := persist.Save(bc.Blocks, bc.Pending, dataFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save state: %v\n", err)
 	}
+}
+
+func cmdGenKey() {
+	pub, priv, err := wallet.GenerateKeyPair()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating keys: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("New Wallet Generated")
+	fmt.Println(strings.Repeat("-", 40))
+	fmt.Printf("Public Key (Address) : %s\n", pub)
+	fmt.Printf("Private Key          : %s\n", priv)
+	fmt.Println(strings.Repeat("-", 40))
+	fmt.Println("Keep your Private Key secret! Use your Public Key as your '-from' address.")
 }
 
 func cmdMine(bc *chain.Chain, l *ledger.Ledger, dataFile string) {
@@ -191,6 +222,7 @@ func printUsage() {
 	fmt.Println("Usage: blockchain [flags] <command> [command-flags]")
 	fmt.Println()
 	fmt.Println("Commands:")
+	fmt.Println("  gen-key    Generate a new wallet key pair")
 	fmt.Println("  add-tx     Add a transaction to the pending pool")
 	fmt.Println("  mine       Mine a new block from pending transactions")
 	fmt.Println("  print      Print the full chain")

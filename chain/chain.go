@@ -111,6 +111,15 @@ func (c *Chain) Validate() ValidationResult {
 			}
 		}
 
+		// Verify Merkle Root matches the transactions
+		if b.MerkleRoot != block.ComputeMerkleRoot(b.Transactions) {
+			return ValidationResult{
+				Valid:        false,
+				ErrorBlock:   i,
+				ErrorMessage: "merkle root does not match transactions",
+			}
+		}
+
 		// Check stored hash matches recomputed hash.
 		recomputed := block.ComputeHash(b)
 		if b.Hash != recomputed {

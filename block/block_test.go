@@ -19,6 +19,7 @@ func TestComputeHashDeterministic(t *testing.T) {
 		PrevHash: strings.Repeat("0", 64),
 		Nonce:    42,
 	}
+	b.MerkleRoot = block.ComputeMerkleRoot(b.Transactions)
 
 	hash1 := block.ComputeHash(b)
 	hash2 := block.ComputeHash(b)
@@ -42,6 +43,7 @@ func TestComputeHashChangesWithFields(t *testing.T) {
 		PrevHash:     strings.Repeat("0", 64),
 		Nonce:        0,
 	}
+	base.MerkleRoot = block.ComputeMerkleRoot(base.Transactions)
 
 	baseHash := block.ComputeHash(base)
 
@@ -69,6 +71,7 @@ func TestComputeHashChangesWithFields(t *testing.T) {
 	// Change transaction
 	modified = base
 	modified.Transactions = []block.Transaction{{From: "A", To: "B", Amount: 20}}
+	modified.MerkleRoot = block.ComputeMerkleRoot(modified.Transactions)
 	if block.ComputeHash(modified) == baseHash {
 		t.Error("changing transaction amount should change hash")
 	}
@@ -122,5 +125,18 @@ func TestMineBlockMeetsDifficulty(t *testing.T) {
 
 			t.Logf("difficulty=%d attempts=%d elapsed=%s hash=%s", diff, attempts, elapsed, mined.Hash[:16]+"...")
 		})
+	}
+}
+
+// TestComputeMerkleRoot validates that the Merkle tree hashes correctly.
+func TestComputeMerkleRoot(t *testing.T) {
+	txns := []block.Transaction{
+		{From: "A", To: "B", Amount: 10},
+		{From: "C", To: "D", Amount: 20},
+		{From: "E", To: "F", Amount: 30},
+	}
+	root := block.ComputeMerkleRoot(txns)
+	if len(root) != 64 {
+		t.Errorf("expected 64 character hex string, got %d", len(root))
 	}
 }

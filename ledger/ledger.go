@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"blockchain/block"
+	"blockchain/wallet"
 )
 
 // Ledger maintains the balance of every account that has ever sent or
@@ -42,9 +43,20 @@ func (l *Ledger) ValidateTransaction(tx block.Transaction, pending []block.Trans
 		return fmt.Errorf("coinbase is a reserved sender, cannot be used as a recipient")
 	}
 
-	// Coinbase transactions can create money out of thin air.
+	// Coinbase transactions can create money out of thin air and don't need signatures.
 	if tx.From == "coinbase" {
 		return nil
+	}
+
+	// Verify digital signature for regular transactions.
+	if tx.PubKey == "" || tx.Signature == "" {
+		return fmt.Errorf("transaction must be signed")
+	}
+	if tx.From != tx.PubKey {
+		return fmt.Errorf("sender address does not match public key")
+	}
+	if !wallet.Verify(tx.PubKey, tx.SignableData(), tx.Signature) {
+		return fmt.Errorf("invalid signature")
 	}
 
 	// Calculate available balance: on-chain balance minus already pending spends.

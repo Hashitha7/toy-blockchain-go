@@ -6,7 +6,19 @@ import (
 	"blockchain/block"
 	"blockchain/chain"
 	"blockchain/ledger"
+	"blockchain/wallet"
 )
+
+// helper to create and sign a transaction
+func makeSignedTx(t *testing.T, pubKey, privKey, to string, amount int64) block.Transaction {
+	tx := block.Transaction{From: pubKey, To: to, Amount: amount, PubKey: pubKey}
+	sig, err := wallet.Sign(privKey, tx.SignableData())
+	if err != nil {
+		t.Fatalf("failed to sign tx: %v", err)
+	}
+	tx.Signature = sig
+	return tx
+}
 
 // TestValidChainPasses builds a small honest chain and confirms that
 // validation reports it as valid (FR-6 — honest chain scenario).
@@ -14,15 +26,18 @@ func TestValidChainPasses(t *testing.T) {
 	bc := chain.NewChain(1) // low difficulty for fast tests
 	l := ledger.NewLedger()
 
+	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
+	bobPub, _, _ := wallet.GenerateKeyPair()
+
 	// Add and mine two blocks.
-	tx1 := block.Transaction{From: "coinbase", To: "Alice", Amount: 100}
+	tx1 := block.Transaction{From: "coinbase", To: alicePub, Amount: 100}
 	bc.AddTransaction(tx1, l)
 	_, _, _, err := bc.MineNextBlock(l)
 	if err != nil {
 		t.Fatalf("mine block 1: %v", err)
 	}
 
-	tx2 := block.Transaction{From: "Alice", To: "Bob", Amount: 30}
+	tx2 := makeSignedTx(t, alicePub, alicePriv, bobPub, 30)
 	bc.AddTransaction(tx2, l)
 	_, _, _, err = bc.MineNextBlock(l)
 	if err != nil {
@@ -41,16 +56,20 @@ func TestTamperDetection(t *testing.T) {
 	bc := chain.NewChain(1)
 	l := ledger.NewLedger()
 
+	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
+	bobPub, bobPriv, _ := wallet.GenerateKeyPair()
+	charliePub, _, _ := wallet.GenerateKeyPair()
+
 	// Build a chain of 3 blocks.
-	tx := block.Transaction{From: "coinbase", To: "Alice", Amount: 100}
+	tx := block.Transaction{From: "coinbase", To: alicePub, Amount: 100}
 	bc.AddTransaction(tx, l)
 	bc.MineNextBlock(l)
 
-	tx2 := block.Transaction{From: "Alice", To: "Bob", Amount: 20}
+	tx2 := makeSignedTx(t, alicePub, alicePriv, bobPub, 20)
 	bc.AddTransaction(tx2, l)
 	bc.MineNextBlock(l)
 
-	tx3 := block.Transaction{From: "Bob", To: "Charlie", Amount: 5}
+	tx3 := makeSignedTx(t, bobPub, bobPriv, charliePub, 5)
 	bc.AddTransaction(tx3, l)
 	bc.MineNextBlock(l)
 
@@ -91,12 +110,15 @@ func TestMinedOverspendValidationFailed(t *testing.T) {
 	bc := chain.NewChain(1)
 	l := ledger.NewLedger()
 
-	tx := block.Transaction{From: "coinbase", To: "Alice", Amount: 100}
+	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
+	bobPub, _, _ := wallet.GenerateKeyPair()
+
+	tx := block.Transaction{From: "coinbase", To: alicePub, Amount: 100}
 	bc.AddTransaction(tx, l)
 	bc.MineNextBlock(l)
 
 	// Manually construct a block with an overspend to bypass pending pool checks
-	overspendTx := block.Transaction{From: "Alice", To: "Bob", Amount: 150}
+	overspendTx := makeSignedTx(t, alicePub, alicePriv, bobPub, 150)
 	lastBlock := bc.Blocks[len(bc.Blocks)-1]
 
 	// Create and mine the invalid block
@@ -120,13 +142,16 @@ func TestTamperedAndReminedBlockDetected(t *testing.T) {
 	bc := chain.NewChain(1)
 	l := ledger.NewLedger()
 
+	alicePub, alicePriv, _ := wallet.GenerateKeyPair()
+	bobPub, _, _ := wallet.GenerateKeyPair()
+
 	// Block 1
-	tx1 := block.Transaction{From: "coinbase", To: "Alice", Amount: 100}
+	tx1 := block.Transaction{From: "coinbase", To: alicePub, Amount: 100}
 	bc.AddTransaction(tx1, l)
 	bc.MineNextBlock(l)
 
 	// Block 2
-	tx2 := block.Transaction{From: "Alice", To: "Bob", Amount: 20}
+	tx2 := makeSignedTx(t, alicePub, alicePriv, bobPub, 20)
 	bc.AddTransaction(tx2, l)
 	bc.MineNextBlock(l)
 
