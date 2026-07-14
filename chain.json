@@ -1,0 +1,36 @@
+{
+  "blocks": [
+    {
+      "height": 0,
+      "timestamp": 0,
+      "transactions": [],
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "nonce": 0,
+      "hash": "258a64c0592be20a75180fa460ba4b9fef9cf731ef0cb860cb9a1423f5b674c7"
+    },
+    {
+      "height": 1,
+      "timestamp": 1784017896,
+      "transactions": [
+        {
+          "from": "coinbase",
+          "to": "Alice",
+          "amount": 500
+        },
+        {
+          "from": "Alice",
+          "to": "Bob",
+          "amount": 200
+        },
+        {
+          "from": "Alice",
+          "to": "Charlie",
+          "amount": 100
+        }
+      ],
+      "prev_hash": "258a64c0592be20a75180fa460ba4b9fef9cf731ef0cb860cb9a1423f5b674c7",
+      "nonce": 7423,
+      "hash": "000af9011605b704595925e5cc4d3fff46ef217a82ce90052bba7b3f29a1974a"
+    }
+  ]
+}
