@@ -1,6 +1,6 @@
 # Research Report — Toy Blockchain
 
-**Author:** [Your Name]  
+**Author:** Hashitha  
 **Date:** July 2026  
 **Module:** blockchain (Go 1.26)
 
